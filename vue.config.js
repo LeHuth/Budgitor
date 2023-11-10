@@ -1,7 +1,9 @@
 module.exports = {
   pluginOptions: {
     electronBuilder: {
-      nodeIntegration: true
+      nodeIntegration: true,
+      externals: ['sqlite3'],
+
     }
   }
 }

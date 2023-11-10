@@ -2,93 +2,98 @@
 import fs from 'fs'
 import pathModule from 'path'
 import Papa from 'papaparse';
-/*
-import { app } from '@electron/remote'*/
-import {computed, ref} from 'vue'
-console.log(process.cwd())
+import { ipcRenderer } from 'electron'
+import {onMounted, ref} from 'vue'
+
 const path = ref(process.cwd().toString())
-const csvData = ref()
+const csvData = ref([])
 
-const files = computed(()=>{
-  const listing = []
-  let files = fs.readdirSync(path.value, {withFileTypes:true})
-  files.forEach(entry => {
-  const stats = fs.lstatSync(pathModule.join(path.value, entry.name))
-        if(stats.isDirectory()){
-          listing.push({name:entry.name, isDirectory:true})
-        } else {
-          listing.push({name:entry.name, isDirectory:false})
-        }
-  })
-  return listing
-})
+const rawData = ref([]);
 
-function loadCSV(event) {
+onMounted(async () => {
+  rawData.value = await ipcRenderer.invoke('fetch-raw-data');
+});
+
+
+const loadCSV = (event) => {
   const files = event.target.files;
   if (files.length === 0) return;
 
   const fileReader = new FileReader();
-
   fileReader.onload = (e) => {
     const content = e.target.result;
-    fileReader.readAsText(files[0], 'ISO-8859-1')
-    // Parse the CSV content
-    // Using PapaParse here, but you could use any parser you like
+    // Parse the CSV content using PapaParse
     Papa.parse(content, {
-      header: true, // Set to true if your CSV has a header row
+      header: true,
       skipEmptyLines: true,
-      encoding: "ISO-8859-1",
       complete: (results) => {
-        csvData.value = results.data;
-        console.log(csvData.value);
-        // Now you can use this.csvData in your program
+        // Simplify data for IPC transmission
+        csvData.value = results.data.map(item => {
+          // Create a plain object, excluding non-serializable properties if any
+          return {...item};
+        });
+      },
+      error: (error) => {
+        console.error("Error parsing CSV: ", error.message);
       }
     });
-
   };
 
   fileReader.onerror = () => {
-    // Handle errors
     console.error("Error reading the file");
   };
 
-  // Read the file as text
-  fileReader.readAsText(files[0]);
-}
+  fileReader.readAsText(files[0], 'ISO-8859-1');
+};
 
-
+const sendToDB = () => {
+  try {
+    // Serialize data to ensure it's safe to send via IPC
+    const serializedData = JSON.parse(JSON.stringify(csvData.value.slice(9)));
+    ipcRenderer.send('add-raw-data', serializedData);
+  } catch (error) {
+    console.error("Error sending data to DB: ", error.message);
+  }
+};
 </script>
 
 <template>
-  <h1>HEHE</h1>
-  <input type="file" @change="loadCSV" />
+  <div>
+    <h1>File Processor</h1>
+    <button @click="sendToDB">Send to DB</button>
+    <input type="file" @change="loadCSV" />
+    <table v-if="csvData.length > 0">
+      <thead>
+      <tr>
+        <th v-for="(value, key) in csvData[0]" :key="key">{{ key }}</th>
+      </tr>
+      </thead>
+      <tbody>
+      <tr v-for="(row, index) in csvData" :key="index">
+        <td v-for="(value, key) in row" :key="key">{{ value }}</td>
+      </tr>
+      </tbody>
+    </table>
+    <table v-if="rawData.length">
+      <thead>
+      <tr>
+        <!-- Adjust the columns according to your table structure -->
+        <th>Date</th>
+        <th>Source</th>
+        <th>Type</th>
+        <!-- ... [other columns] -->
+      </tr>
+      </thead>
+      <tbody>
+      <tr v-for="row in rawData" :key="row.id">
+        <td>{{ row.date }}</td>
+        <td>{{ row.source }}</td>
+        <td>{{ row.type }}</td>
+        <!-- ... [other columns] -->
+      </tr>
+      </tbody>
+    </table>
 
-<!--  <table>
-    <thead>
-    <tr>
-      <th v-for="entry in csvData.value[7].extra_" :key="entry">{{entry}}</th>
-    </tr>
-    </thead>
+  </div>
 
-  </table>-->
-<table v-if="csvData">
-    <thead>
-    <tr>
-      <th v-for="entry in csvData[8].__parsed_extra" :key="entry">{{entry}}</th>
-    </tr>
-    </thead>
-    <tbody>
-    <tr v-for="entry in csvData.slice(9)" :key="entry">
-      <td v-for="item in entry.__parsed_extra" :key="item">{{item}}</td>
-    </tr>
-    </tbody>
-  </table>
-  <ul>
-    <li v-for="entry in csvData" :key="entry">{{entry}}</li>
-  </ul>
-  <p v-if="csvData">{{csvData[8]}}</p>
-<!--  <button @click="path = pathModule.join(path, '..')">Back</button>
-  <ul>
-    <li  v-for="elem in files" :key="elem"><button :disabled="!elem.isDirectory" :style="elem.isDirectory ? 'cursor:pointer' : ''" @click="path = pathModule.join(path, elem.name)">{{elem}}</button></li>
-  </ul>-->
 </template>

@@ -1,87 +1,188 @@
-import { app, protocol, BrowserWindow } from 'electron'
-import { createProtocol } from 'vue-cli-plugin-electron-builder/lib'
-import installExtension, { VUEJS_DEVTOOLS } from 'electron-devtools-installer'
+import {app, BrowserWindow, ipcMain, protocol} from 'electron';
+import {createProtocol} from 'vue-cli-plugin-electron-builder/lib';
+import installExtension, {VUEJS_DEVTOOLS} from 'electron-devtools-installer';
+import * as path from "path";
+import {Database} from 'sqlite3';
+
+const electron = require('electron');
+
+require('@electron/remote/main').initialize();
+
+const userDataPath = (electron.app || electron.remote.app).getPath('userData');
+const dbPath = path.join(userDataPath, 'your-database-file.db');
+console.log(dbPath);
+
+const db = new Database(dbPath, (err) => {
+  if (err) {
+    console.error('Error opening database: ', err.message);
+    return;
+  }
+
+  db.serialize(() => {
+    // Create the categories table
+    db.run(`CREATE TABLE IF NOT EXISTS categories (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT,
+        type TEXT,
+        color TEXT)`,
+        (err) => {
+      if (err) {
+        console.error('Error creating categories table: ', err.message);
+      } else {
+        const categories = ['Housing', 'Food', 'Transportation', 'Healthcare', 'Entertainment', 'Education', 'Savings', 'Miscellaneous'];
+        const colors = ['#FF0000', '#FFA500', '#FFFF00', '#008000', '#0000FF', '#4B0082', '#EE82EE', '#808080'];
+
+        // Insert default categories
+        const stmt = db.prepare('INSERT INTO categories (name, type, color) VALUES (?, ?, ?)', (err) => {
+          if (err) {
+            console.error('Error preparing statement: ', err.message);
+            return;
+          }
+          categories.forEach((category, index) => {
+            stmt.run(category, 'expense', colors[index], (err) => {
+              if (err) {
+                console.error('Error inserting row: ', err.message);
+              }
+            });
+          });
+          stmt.finalize((err) => {
+            if (err) {
+              console.error('Error finalizing statement: ', err.message);
+            }
+          });
+        });
+      }
+    });
+
+    // Create the raw_data table with a foreign key reference to the categories table
+    db.run(`CREATE TABLE IF NOT EXISTS raw_data (
+    date DATE, 
+    source TEXT, 
+    type TEXT, 
+    reason TEXT, 
+    balance REAL, 
+    amount REAL, 
+    currency TEXT, 
+    category_id INTEGER,
+    FOREIGN KEY(category_id) REFERENCES categories(id)
+  )`, (err) => {
+      if (err) {
+        console.error('Error creating raw_data table: ', err.message);
+      } else {
 
 
-require('@electron/remote/main').initialize()
+      }
+    });
+  });
 
-const isDevelopment = process.env.NODE_ENV !== 'production'
+});
 
-// Scheme must be registered before the app is ready
-protocol.registerSchemesAsPrivileged([
-  { scheme: 'app', privileges: { secure: true, standard: true } }
-])
+ipcMain.on('add-raw-data', (event, arg) => {
+  const stmt = db.prepare('INSERT INTO raw_data VALUES (?, ?, ?, ?, ?, ?, ?, ?)', (err) => {
+    if (err) {
+      console.error('Error preparing statement: ', err.message);
+      return;
+    }
+    arg.forEach(row => {
+      stmt.run(row['Umsatzanzeige'], row['__parsed_extra'][0], row['__parsed_extra'][1], row['__parsed_extra'][2], row['__parsed_extra'][3], row['__parsed_extra'][5], row['__parsed_extra'][4],null, (err) => {
+        if (err) {
+          console.error('Error inserting row: ', err.message);
+        }
+      });
+    });
+    stmt.finalize((err) => {
+      if (err) {
+        console.error('Error finalizing statement: ', err.message);
+      }
+    });
+  });
+});
+
+const isDevelopment = process.env.NODE_ENV !== 'production';
+
+protocol.registerSchemesAsPrivileged([{ scheme: 'app', privileges: { secure: true, standard: true } }]);
 
 async function createWindow() {
-  // Create the browser window.
   const win = new BrowserWindow({
     width: 800,
     height: 600,
     webPreferences: {
-      // Use pluginOptions.nodeIntegration, leave this alone
-      // See nklayman.github.io/vue-cli-plugin-electron-builder/guide/security.html#node-integration for more info
       nodeIntegration: true,
       contextIsolation: false,
       enableRemoteModule: true,
     }
-  })
+  });
 
   if (process.env.WEBPACK_DEV_SERVER_URL) {
-    // Load the url of the dev server if in development mode
-    await win.loadURL(process.env.WEBPACK_DEV_SERVER_URL)
-    if (!process.env.IS_TEST) win.webContents.openDevTools()
+    await win.loadURL(process.env.WEBPACK_DEV_SERVER_URL);
+    if (!process.env.IS_TEST) win.webContents.openDevTools();
   } else {
-    createProtocol('app')
-    // Load the index.html when not in development
-    win.loadURL('app://./index.html')
+    createProtocol('app');
+    win.loadURL('app://./index.html');
   }
 }
 
-// Quit when all windows are closed.
-app.on('window-all-closed', () => {
-  // On macOS it is common for applications and their menu bar
-  // to stay active until the user quits explicitly with Cmd + Q
-  if (process.platform !== 'darwin') {
-    app.quit()
+function fetchRawData() {
+  return new Promise((resolve, reject) => {
+    db.all('SELECT * FROM raw_data', [], (err, rows) => {
+      if (err) {
+        reject(err);
+        return;
+      }
+      resolve(rows);
+    });
+  });
+}
+
+ipcMain.handle('fetch-raw-data', async () => {
+  try {
+    return await fetchRawData();
+  } catch (error) {
+    console.error('Error fetching data: ', error.message);
+    return [];
   }
-})
+});
+
+app.on('window-all-closed', () => {
+  if (process.platform !== 'darwin') {
+    db.close((err) => {
+      if (err) {
+        console.error('Error closing database: ', err.message);
+      }
+    });
+    app.quit();
+  }
+});
 
 app.on('browser-window-created', (_, window) => {
-  require("@electron/remote/main").enable(window.webContents)
-})
+  require("@electron/remote/main").enable(window.webContents);
+});
 
 app.on('activate', () => {
-  // On macOS it's common to re-create a window in the app when the
-  // dock icon is clicked and there are no other windows open.
-  if (BrowserWindow.getAllWindows().length === 0) createWindow()
-})
+  if (BrowserWindow.getAllWindows().length === 0) createWindow();
+});
 
-// This method will be called when Electron has finished
-// initialization and is ready to create browser windows.
-// Some APIs can only be used after this event occurs.
 app.on('ready', async () => {
   if (isDevelopment && !process.env.IS_TEST) {
-    // Install Vue Devtools
     try {
-      await installExtension(VUEJS_DEVTOOLS)
+      await installExtension(VUEJS_DEVTOOLS);
     } catch (e) {
-      console.error('Vue Devtools failed to install:', e.toString())
+      console.error('Vue Devtools failed to install:', e.toString());
     }
   }
-  createWindow()
-})
+  createWindow();
+});
 
-// Exit cleanly on request from parent process in development mode.
 if (isDevelopment) {
   if (process.platform === 'win32') {
     process.on('message', data => {
       if (data === 'graceful-exit') {
-        app.quit()
+        app.quit();
       }
-    })
+    });
   } else {
     process.on('SIGTERM', () => {
-      app.quit()
-    })
+      app.quit();
+    });
   }
 }
