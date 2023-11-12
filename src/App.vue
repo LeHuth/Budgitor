@@ -60,7 +60,7 @@ const sendToDB = () => {
 <template>
   <div>
     <h1 class="font-bold underline">File Processor</h1>
-    <button @click="sendToDB">Send to DB</button>
+    <button class="m-3 hover:bg-indigo-500 transition-colors bg-indigo-700 py-2 px-4 rounded-3xl font-semibold text-sm text-white" @click="sendToDB">Send to DB</button>
     <input type="file" @change="loadCSV" />
     <table v-if="csvData.length > 0">
       <thead>
