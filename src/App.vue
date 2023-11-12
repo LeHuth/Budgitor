@@ -59,7 +59,7 @@ const sendToDB = () => {
 
 <template>
   <div>
-    <h1>File Processor</h1>
+    <h1 class="font-bold underline">File Processor</h1>
     <button @click="sendToDB">Send to DB</button>
     <input type="file" @change="loadCSV" />
     <table v-if="csvData.length > 0">
