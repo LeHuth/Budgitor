@@ -29,33 +29,42 @@ const db = new Database(dbPath, (err) => {
       if (err) {
         console.error('Error creating categories table: ', err.message);
       } else {
-        const categories = ['Housing', 'Food', 'Transportation', 'Healthcare', 'Entertainment', 'Education', 'Savings', 'Miscellaneous'];
-        const colors = ['#FF0000', '#FFA500', '#FFFF00', '#008000', '#0000FF', '#4B0082', '#EE82EE', '#808080'];
+        db.get("SELECT COUNT(*) AS count FROM categories", [], (err, row) => {
+          if (err) {
+            console.error('Error querying categories table: ', err.message);
+          } else if (row.count === 0) {
+            const categories = ['Housing', 'Food', 'Transportation', 'Healthcare', 'Entertainment', 'Education', 'Savings', 'Miscellaneous'];
+            const colors = ['#FF0000', '#FFA500', '#FFFF00', '#008000', '#0000FF', '#4B0082', '#EE82EE', '#808080'];
+            const stmt = db.prepare('INSERT INTO categories (name, type, color) VALUES (?, ?, ?)', (err) => {
+              if (err) {
+                console.error('Error preparing statement: ', err.message);
+                return;
+              }
+              categories.forEach((category, index) => {
+                stmt.run(category, 'expense', colors[index], (err) => {
+                  if (err) {
+                    console.error('Error inserting row: ', err.message);
+                  }
+                });
+              });
+              stmt.finalize((err) => {
+                if (err) {
+                  console.error('Error finalizing statement: ', err.message);
+                }
+              });
+            });
+          }
+        });
+
 
         // Insert default categories
-        const stmt = db.prepare('INSERT INTO categories (name, type, color) VALUES (?, ?, ?)', (err) => {
-          if (err) {
-            console.error('Error preparing statement: ', err.message);
-            return;
-          }
-          categories.forEach((category, index) => {
-            stmt.run(category, 'expense', colors[index], (err) => {
-              if (err) {
-                console.error('Error inserting row: ', err.message);
-              }
-            });
-          });
-          stmt.finalize((err) => {
-            if (err) {
-              console.error('Error finalizing statement: ', err.message);
-            }
-          });
-        });
+
       }
     });
 
     // Create the raw_data table with a foreign key reference to the categories table
     db.run(`CREATE TABLE IF NOT EXISTS raw_data (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
     date DATE, 
     source TEXT, 
     type TEXT, 
@@ -106,7 +115,6 @@ async function createWindow() {
   const win = new BrowserWindow({
     width: 800,
     height: 600,
-    titleBarStyle: 'hidden',
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false,
@@ -125,14 +133,30 @@ async function createWindow() {
 
 function fetchRawData() {
   return new Promise((resolve, reject) => {
-    db.all('SELECT * FROM raw_data', [], (err, rows) => {
-      if (err) {
-        reject(err);
-        return;
-      }
-      resolve(rows);
-    });
+    // Modified SQL query to join with categories table
+    db.all(`SELECT raw_data.*, categories.name AS category_name, categories.color AS category_color
+            FROM raw_data
+            LEFT JOIN categories ON raw_data.category_id = categories.id`,
+        [], (err, rows) => {
+          if (err) {
+            reject(err);
+            return;
+          }
+          resolve(rows);
+        });
   });
+}
+
+function fetchCategories(){
+    return new Promise((resolve, reject) => {
+        db.all(`SELECT * FROM categories`, [], (err, rows) => {
+        if (err) {
+            reject(err);
+            return;
+        }
+        resolve(rows);
+        });
+    });
 }
 
 ipcMain.handle('fetch-raw-data', async () => {

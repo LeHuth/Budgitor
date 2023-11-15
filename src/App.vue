@@ -4,6 +4,8 @@ import pathModule from 'path'
 import Papa from 'papaparse';
 import { ipcRenderer } from 'electron'
 import {onMounted, ref} from 'vue'
+import MButton from "@/components/mButton.vue";
+import DataTable from "@/components/dataTable.vue";
 
 const path = ref(process.cwd().toString())
 const csvData = ref([])
@@ -11,7 +13,10 @@ const csvData = ref([])
 const rawData = ref([]);
 
 onMounted(async () => {
+  console.log("Fetching raw data")
   rawData.value = await ipcRenderer.invoke('fetch-raw-data');
+  console.log("Raw data fetched")
+  console.log(rawData.value)
 });
 
 
@@ -57,9 +62,13 @@ const sendToDB = () => {
 };
 </script>
 
-<template>
+<template class="bg-background-600">
   <div>
+    <data-table class="bg-background-50" v-if="rawData" :data="rawData"/>
+<!--
     <h1 class="font-bold underline">File Processor</h1>
+    <mButton size="xl" class="bg-gray-600" />
+    <button class="btn-primary">My Primary</button>
     <button class="m-3 hover:bg-indigo-500 transition-colors bg-indigo-700 py-2 px-4 rounded-3xl font-semibold text-sm text-white" @click="sendToDB">Send to DB</button>
     <input type="file" @change="loadCSV" />
     <table v-if="csvData.length > 0">
@@ -77,11 +86,11 @@ const sendToDB = () => {
     <table v-if="rawData.length">
       <thead>
       <tr>
-        <!-- Adjust the columns according to your table structure -->
+        &lt;!&ndash; Adjust the columns according to your table structure &ndash;&gt;
         <th>Date</th>
         <th>Source</th>
         <th>Type</th>
-        <!-- ... [other columns] -->
+        &lt;!&ndash; ... [other columns] &ndash;&gt;
       </tr>
       </thead>
       <tbody>
@@ -89,10 +98,10 @@ const sendToDB = () => {
         <td>{{ row.date }}</td>
         <td>{{ row.source }}</td>
         <td>{{ row.type }}</td>
-        <!-- ... [other columns] -->
+        &lt;!&ndash; ... [other columns] &ndash;&gt;
       </tr>
       </tbody>
-    </table>
+    </table>-->
 
   </div>
 
