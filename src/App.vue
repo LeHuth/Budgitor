@@ -4,8 +4,9 @@ import pathModule from 'path'
 import Papa from 'papaparse';
 import { ipcRenderer } from 'electron'
 import {onMounted, ref} from 'vue'
-import MButton from "@/components/mButton.vue";
 import DataTable from "@/components/dataTable.vue";
+import MyNavbar from "@/components/myNavbar.vue";
+import BudgitorIcon from "@/components/BudgitorIcon.vue";
 
 const path = ref(process.cwd().toString())
 const csvData = ref([])
@@ -64,6 +65,8 @@ const sendToDB = () => {
 
 <template class="bg-background-600">
   <div>
+    <myNavbar/>
+<!--    <budgitor-icon class="w-24 h-24 fill-accent-500 "/>-->
     <data-table class="bg-background-50" v-if="rawData" :data="rawData"/>
 <!--
     <h1 class="font-bold underline">File Processor</h1>

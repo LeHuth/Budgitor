@@ -3,6 +3,7 @@ import {createProtocol} from 'vue-cli-plugin-electron-builder/lib';
 import installExtension, {VUEJS_DEVTOOLS} from 'electron-devtools-installer';
 import * as path from "path";
 import {Database} from 'sqlite3';
+import guessCategories from "@/analyse";
 
 const electron = require('electron');
 
@@ -105,6 +106,12 @@ ipcMain.on('add-raw-data', (event, arg) => {
       }
     });
   });
+});
+
+ipcMain.on('print-rows', (event, arg) => {
+  guessCategories(db).then(r => {
+    console.log(r)
+  })
 });
 
 const isDevelopment = process.env.NODE_ENV !== 'production';
